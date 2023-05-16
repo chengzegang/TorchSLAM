@@ -159,17 +159,19 @@ def processor(queue: Queue | None, confs: Mapping):
             t1 = t[:n_p]
             t2 = t[n_p:]
             logger.debug(f'shapes of R1: {R1.shape}, R2: {R2.shape}, t1: {t1.shape}, t2: {t2.shape}')
-            curr_locs = pnp.reproj(prev_locs, R1, t1, R2, t2)
+            prev_locs = prev_locs.view(-1, 1, 3)
+            curr_locs = pnp.reproj(prev_locs, R1, t1, R2, t2).squeeze(1)
         else:
-            curr_locs = pnp.proj(prev_locs, R, t)
+            prev_locs = prev_locs.view(-1, 1, 3)
+            curr_locs = pnp.proj(prev_locs, R, t).squeeze(1)
 
-        curr_locs = curr_locs.view(-1, 3)
+        logger.debug(f'shape of curr_locs: {curr_locs.shape}')
         prev_locs = curr_locs.clone()
         prev_kpts = kpts.clone()
         prev_descs = descs.clone()
 
-        merge_locs = curr_locs.nanmean(dim=0, keepdim=True)
-        track.append(merge_locs.detach().cpu())
+        # merge_locs = curr_locs.nanmean(dim=0, keepdim=True)
+        track.append(curr_locs.detach().cpu())
         track = [torch.cat(track, dim=0)]
         logger.debug(f'track shape: {track[0].shape}')
         fig = plt.figure(figsize=(10, 10))

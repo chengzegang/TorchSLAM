@@ -185,6 +185,7 @@ module = [
     "cudf.*",
     "cugraph.*",
     "matplotlib.*",
+    "roma.*"
 ]
 ignore_missing_imports = true
 
