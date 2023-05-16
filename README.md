@@ -2,7 +2,7 @@
 
 Author: Zegang Cheng
 
-**REMAINDER** The project is in alpha stage, and it is still under heavily development, so the performance is not guaranteed.
+**REMAINDER** The project is in alpha stage, and it is still under heavy development, so the performance is not guaranteed.
 
 This is a Differentiable Distributed Visual-SLAM (Simultaneous localization and mapping) System built on Pytorch. It is NOT aimed for embedded system, on the contrary, the project is designed to fully utilize the power of Big Data and Distributed Computing System like NYU HPC Greene.
 
