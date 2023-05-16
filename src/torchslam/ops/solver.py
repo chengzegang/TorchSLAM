@@ -85,8 +85,8 @@ def sampson_epipolar_distance(Fm: Tensor, pts1: Tensor, pts2: Tensor, mask: Tens
     # line2_in_1 = (F.transpose(dim0=-2, dim1=-1) @ pts2.transpose(dim0=-2, dim1=-1)).transpose(dim0=-2, dim1=-1)
 
     # Instead we can just transpose F once and switch the order of multiplication
-    logger.debug(f'pts1.shape: {pts1.shape}, pts2.shape: {pts2.shape}, mask.shape: {mask.shape}')
-    logger.debug(f'total valid pairs: {mask.sum()}')
+    # logger.debug(f'pts1.shape: {pts1.shape}, pts2.shape: {pts2.shape}, mask.shape: {mask.shape}')
+    # logger.debug(f'total valid pairs: {mask.sum()}')
     pts1, pts2, pair_mask = _dense_to_pairs(pts1, pts2, mask)
     F_t: Tensor = Fm.transpose(-1, -2)
     line1_in_2: Tensor = pts1 @ F_t  # (B, N, D) @ (B, D, D) -> (B, N, D)
@@ -153,6 +153,20 @@ def find_fundamental_equirectangular(p1: Tensor, p2: Tensor, mask: Tensor | None
     p1 = spherical_project_inverse(p1)
     p2 = spherical_project_inverse(p2)
 
+    x1, y1, z1 = torch.chunk(p1, dim=-1, chunks=3)  # Bx1xN
+    x2, y2, z2 = torch.chunk(p2, dim=-1, chunks=3)  # Bx1xN
+
+    X = torch.cat([x1 * x2, x1 * y2, z1 * z2, y1 * x2, y1 * y2, y1 * z2, z1 * x2, z1 * y2, z1 * z2], dim=-1)
+    if mask is not None:
+        X = X.transpose(-2, -1) @ mask.type_as(X) @ X
+    else:
+        X = X.transpose(-2, -1) @ X
+    _, _, V = torch.linalg.svd(X)
+    F: Tensor = V[..., -1].reshape(-1, 3, 3)
+    return F
+
+
+def find_fundamental3d(p1: Tensor, p2: Tensor, mask: Tensor | None = None) -> Tensor:
     x1, y1, z1 = torch.chunk(p1, dim=-1, chunks=3)  # Bx1xN
     x2, y2, z2 = torch.chunk(p2, dim=-1, chunks=3)  # Bx1xN
 

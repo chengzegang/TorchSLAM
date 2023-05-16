@@ -48,9 +48,9 @@ def round_nn(xd: Tensor, yd: Tensor, mask: Tensor, ratio_thr: float = 0.6, max_m
 
     col_ratio_test = (col_top2[..., 0, :] / (1e-6 + col_top2[..., 1, :])) < ratio_thr
     col_ind = col_ind & col_ratio_test.unsqueeze(-2)
-    logger.debug(f'shapes of row_ind and col_ind: {row_ind.shape}, {col_ind.shape}')
+    # logger.debug(f'shapes of row_ind and col_ind: {row_ind.shape}, {col_ind.shape}')
     is_round = row_ind & col_ind
-    logger.debug(f'average round-way match: {is_round.sum(dim=(-1, -2)).float().mean()}')
+    # logger.debug(f'average round-way match: {is_round.sum(dim=(-1, -2)).float().mean()}')
     is_round: Tensor = is_round & (mask > 0) & valid
     return is_round
 

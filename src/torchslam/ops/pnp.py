@@ -6,6 +6,14 @@ from loguru import logger
 import typer
 from torch.nn import Module
 from ..utils import log
+import roma
+import torch.nn.functional as F
+
+
+def quaternion_to_rotation_matrix(q: Tensor) -> Tensor:
+    q = F.normalize(q, dim=-1, p=2)
+    rot: Tensor = roma.unitquat_to_rotmat(q)
+    return rot
 
 
 def so3(phi: Tensor) -> Tensor:
@@ -27,7 +35,6 @@ def proj(x: Tensor, R: Tensor, t: Tensor) -> Tensor:
     R: (*, 3, 3)
     t: (*, 3)
     '''
-
     x = (x @ R.transpose(-1, -2)) + t.unsqueeze(-2)
     return x
 
@@ -38,7 +45,23 @@ def reproj(x: Tensor, R1: Tensor, t1: Tensor, R2: Tensor, t2: Tensor) -> Tensor:
     return x
 
 
-def creproj(x: Tensor, R: Tensor, t: Tensor) -> Tensor:
+def creproj(x: Tensor, R1: Tensor, t1: Tensor, R2: Tensor, t2: Tensor) -> Tensor:
+    '''
+    x: (B1, N, 3)
+    R1: (B1, 3, 3)
+    t1: (B1, 3)
+    R2: (B2, 3, 3)
+    t2: (B2, 3)
+    '''
+    x = proj(x, torch.linalg.pinv(R1), -t1)  # (B, N, 3)
+    x = x.unsqueeze(1)
+    R2 = R2.unsqueeze(0)
+    t2 = t2.unsqueeze(0)
+    x = proj(x, R2, t2)  # (B, B, N, 3)
+    return x
+
+
+def sreproj(x: Tensor, R: Tensor, t: Tensor) -> Tensor:
     '''
     x: (B, N, 3)
     R: (B, 3, 3)
@@ -54,8 +77,9 @@ def creproj(x: Tensor, R: Tensor, t: Tensor) -> Tensor:
 
 
 def _forward_pass(p: Tensor, phi: Tensor, t: Tensor) -> Tensor:
-    R = so3(phi)
-    ph = creproj(p, R, t)
+    # R = so3(phi)
+    R = quaternion_to_rotation_matrix(phi)
+    ph = sreproj(p, R, t)
     return ph
 
 
@@ -86,11 +110,11 @@ def bundle_adjust(
     t: (B, 3)
     """
     B, N, D = d.shape
-    log.shapes(p=p, d=d, mask=mask)
+    # log.shapes(p=p, d=d, mask=mask)
     p1, p2, m1 = _expand_flat(p, p, mask)
     d1, d2, m2 = _expand_flat(d, d, mask)
     m = m1 & m2
-    log.shapes(p1=p1, p2=p2, d1=d1, d2=d2, m=m)
+    # log.shapes(p1=p1, p2=p2, d1=d1, d2=d2, m=m)
     ins, _, _ = matcher(p1, d1, p2, d2, m)
     ins = ins.view(B, B, N, N)
 
@@ -101,7 +125,7 @@ def bundle_adjust(
     ins.diagonal(-1, -2).zero_()
 
     w = ins.type_as(d)
-    phi = torch.randn(B, 3, device=d.device).requires_grad_(True)
+    phi = torch.randn(B, 4, device=d.device).requires_grad_(True)
     t = torch.randn(B, 3, device=d.device).requires_grad_(True)
 
     opt = Adam([phi, t], lr=1e-2)
@@ -111,7 +135,7 @@ def bundle_adjust(
     typer.echo('Bundle adjustment')
     last_error = 1000
 
-    log.shapes(p=p, d=d, mask=mask, phi=phi, t=t, ins=ins, w=w)
+    # .shapes(p=p, d=d, mask=mask, phi=phi, t=t, ins=ins, w=w)
 
     with typer.progressbar(range(it)) as progress:
         for _ in progress:
@@ -129,6 +153,7 @@ def bundle_adjust(
             if torch.abs(last_error - err) < 1e-8 or err <= 0.002:
                 break
             last_error = err
-    R = so3(phi)  # B x 3 x 3
-
+    R = quaternion_to_rotation_matrix(phi).detach()  # B x 3 x 3
+    # R = so3(phi).detach()  # B x 3 x 3
+    t = t.detach()  # B x 3
     return R, t

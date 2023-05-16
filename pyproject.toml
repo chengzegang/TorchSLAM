@@ -185,7 +185,10 @@ module = [
     "cudf.*",
     "cugraph.*",
     "matplotlib.*",
-    "roma.*"
+    "roma.*",
+    "torch-scatter.*",
+    "torch_scatter.*",
+    "ot.*",
 ]
 ignore_missing_imports = true
 
