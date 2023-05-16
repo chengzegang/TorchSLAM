@@ -15,7 +15,7 @@ To fully utilize the power of Multiple GPUs, the project is designed under the p
 
 ## Roadmap
 
-- [x] Multi-Processes Actor Model (Proof-of-Concept)
+- [x] Multi-Process Actor Model (Proof-of-Concept)
 - [x] Graph Database (Proof-of-Concept)
 - [x] Nuxt.js & Vue.js & THREE.js Visualization (Proof-of-Concept)
 - [x] Naive Bundle Adjustment with Gradient-based Optimization
