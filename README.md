@@ -19,10 +19,10 @@ To fully utilize the power of Multiple GPUs, the project is designed under the p
 - [x] Graph Database (Proof-of-Concept)
 - [x] Nuxt.js & Vue.js & THREE.js Visualization (Proof-of-Concept)
 - [x] Naive Bundle Adjustment with Gradient-based Optimization
-- [] Pose Graph Optimization
-- [] Loop Closure Detection
-- [] Semantic SLAM, Global/Local Map Optimization, Deep Learning-based Methods, etc.
-- [] Parallel-And-Distributed of all the above
+- [ ] Pose Graph Optimization
+- [ ] Loop Closure Detection
+- [ ] Semantic SLAM, Global/Local Map Optimization, Deep Learning-based Methods, etc.
+- [ ] Parallel-And-Distributed of all the above
 
 ## License
 
