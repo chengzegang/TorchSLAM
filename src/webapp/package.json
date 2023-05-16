@@ -1,0 +1,24 @@
+{
+  "name": "nuxt-app",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "devDependencies": {
+    "@types/node": "^18",
+    "@types/three": "^0.152.0",
+    "@types/ws": "^8.5.4",
+    "nuxt": "^3.4.3"
+  },
+  "dependencies": {
+    "@pinia/nuxt": "^0.4.10",
+    "pinia": "^2.0.36",
+    "three": "^0.152.2",
+    "three-addons": "^1.2.0",
+    "three-mesh-bvh": "^0.5.24"
+  }
+}

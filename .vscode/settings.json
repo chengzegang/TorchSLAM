@@ -1,0 +1,9 @@
+{
+    "workbench.colorCustomizations": {
+        "activityBar.background": "#281F72",
+        "titleBar.activeBackground": "#382CA0",
+        "titleBar.activeForeground": "#FAF9FD"
+    },
+    "ros.distro": "humble",
+    "editor.formatOnSave": true
+}
