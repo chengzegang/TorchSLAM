@@ -22,16 +22,7 @@ from tqdm import tqdm
 from torch import Tensor
 
 
-class FeatureExtractor(Module):
-    ...
-
-
-class KDFeatureExtractor(FeatureExtractor):
-    def forward(self, *args, **kwargs) -> Tuple[Tensor, Tensor, Tensor]:
-        raise NotImplementedError
-
-
-class SIFT(KDFeatureExtractor):
+class SIFT(Module):
     def __init__(
         self,
         num_features: int = 512,

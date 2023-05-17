@@ -5,80 +5,17 @@ from torch.optim import Adam
 from loguru import logger
 import typer
 from torch.nn import Module
+
+from torchslam.ops.functional.convert import quat_to_mat
 from ..utils import log
 import roma
 import torch.nn.functional as F
-
-
-def quaternion_to_rotation_matrix(q: Tensor) -> Tensor:
-    q = F.normalize(q, dim=-1, p=2)
-    rot: Tensor = roma.unitquat_to_rotmat(q)
-    return rot
-
-
-def so3(phi: Tensor) -> Tensor:
-    B = phi.shape[0]
-    R = torch.zeros(B, 3, 3, device=phi.device, dtype=phi.dtype)
-    R[:, 0, 1] = -phi[:, 2]
-    R[:, 0, 2] = phi[:, 1]
-    R[:, 1, 0] = phi[:, 2]
-    R[:, 1, 2] = -phi[:, 0]
-    R[:, 2, 0] = -phi[:, 1]
-    R[:, 2, 1] = phi[:, 0]
-    R = R + torch.eye(3, device=phi.device, dtype=phi.dtype).view(1, 3, 3)
-    return R
-
-
-def proj(x: Tensor, R: Tensor, t: Tensor) -> Tensor:
-    '''
-    x: (*, N, 3)
-    R: (*, 3, 3)
-    t: (*, 3)
-    '''
-    x = (x @ R.transpose(-1, -2)) + t.unsqueeze(-2)
-    return x
-
-
-def reproj(x: Tensor, R1: Tensor, t1: Tensor, R2: Tensor, t2: Tensor) -> Tensor:
-    x = proj(x, torch.linalg.pinv(R1), -t1)
-    x = proj(x, R2, t2)
-    return x
-
-
-def creproj(x: Tensor, R1: Tensor, t1: Tensor, R2: Tensor, t2: Tensor) -> Tensor:
-    '''
-    x: (B1, N, 3)
-    R1: (B1, 3, 3)
-    t1: (B1, 3)
-    R2: (B2, 3, 3)
-    t2: (B2, 3)
-    '''
-    x = proj(x, torch.linalg.pinv(R1), -t1)  # (B, N, 3)
-    x = x.unsqueeze(1)
-    R2 = R2.unsqueeze(0)
-    t2 = t2.unsqueeze(0)
-    x = proj(x, R2, t2)  # (B, B, N, 3)
-    return x
-
-
-def sreproj(x: Tensor, R: Tensor, t: Tensor) -> Tensor:
-    '''
-    x: (B, N, 3)
-    R: (B, 3, 3)
-    t: (B, 3)
-    '''
-    B, N, _ = x.shape
-    x = proj(x, torch.linalg.pinv(R), -t)  # (B, N, 3)
-    x = x.unsqueeze(1)
-    R = R.unsqueeze(0)
-    t = t.unsqueeze(0)
-    x = proj(x, R, t)  # (B, B, N, 3)
-    return x
+from .functional.proj import proj, sreproj
 
 
 def _forward_pass(p: Tensor, phi: Tensor, t: Tensor) -> Tensor:
     # R = so3(phi)
-    R = quaternion_to_rotation_matrix(phi)
+    R = quat_to_mat(phi)
     ph = sreproj(p, R, t)
     return ph
 
@@ -151,7 +88,7 @@ def bundle_adjust(
             progress.label = f'err: {err.item():.4f}'
             if err <= 0.001:
                 break
-    R = quaternion_to_rotation_matrix(phi).detach()  # B x 3 x 3
+    R = quat_to_mat(phi).detach()  # B x 3 x 3
     # R = so3(phi).detach()  # B x 3 x 3
     t = t.detach()  # B x 3
     return R, t

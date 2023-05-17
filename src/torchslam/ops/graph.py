@@ -3,8 +3,9 @@ import time
 from typing import Callable, Tuple
 import torch
 from torch import Tensor
-from . import pnp
+from . import ba
 from . import merger
+from .functional.proj import proj, reproj, creproj, sreproj
 from torch_scatter import scatter
 from torch.nn import Module, Parameter
 
@@ -91,21 +92,7 @@ class LocalGraph(Module):
         self._keyframe_descs = torch.cat([self.keyframe_descs, new_descs], dim=0)
         self._keyframe_Rs = torch.cat([self._keyframe_Rs, new_R], dim=0)
         self._keyframe_ts = torch.cat([self._keyframe_ts, new_t], dim=0)
-        # if len(self._keyframe_kpts) > self.track_at_most_n_keyframes * 2:
-        #     n = len(self._keyframe_kpts) - self.track_at_most_n_keyframes
-        #     keyframes = merger.merge_keyframes(
-        #         self.keyframe_locs[n:],
-        #         self.keyframe_kpts[n:],
-        #         self.keyframe_descs[n:],
-        #         self.keyframe_Rs[n:],
-        #         self.keyframe_ts[n:],
-        #     )
-        #     self._keyframe_locs.data = torch.cat([self.keyframe_locs[:n], keyframes[0]], dim=0)
-        #     self._keyframe_kpts.data = torch.cat([self.keyframe_kpts[:n], keyframes[1]], dim=0)
-        #     self._keyframe_descs.data = torch.cat([self.keyframe_descs[:n], keyframes[2]], dim=0)
-        #     self._keyframe_Rs.data = torch.cat([self._keyframe_Rs[:n], keyframes[3]], dim=0)
-        #     self._keyframe_ts.data = torch.cat([self._keyframe_ts[:n], keyframes[4]], dim=0)
-        #
+
         msg = (new_locs, new_kpts, new_descs, new_R, new_t)
         while self.msg_queue is not None:
             try:
@@ -152,7 +139,7 @@ class LocalGraph(Module):
         return curr_kpts, curr_descs, curr_mask, kf_locs
 
     def _bundle_adjust(self, curr_kpts: Tensor, curr_descs: Tensor, curr_mask: Tensor) -> Tuple[Tensor, ...]:
-        curr_R, curr_t = pnp.bundle_adjust(curr_kpts, curr_descs, curr_mask, self.matcher)
+        curr_R, curr_t = ba.bundle_adjust(curr_kpts, curr_descs, curr_mask, self.matcher)
         return curr_R, curr_t
 
     def _unpack(self, bundle_R: Tensor, bundle_t: Tensor, n_new: int) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
@@ -171,14 +158,14 @@ class LocalGraph(Module):
         prev_locs: Tensor | None = None,
     ):
         if prev_locs is not None and prev_R is not None and prev_t is not None:
-            newframe_locs = pnp.creproj(prev_locs.view(-1, 1, 3), prev_R, prev_t, curr_R, curr_t).squeeze(-2).mean(0)
+            newframe_locs = creproj(prev_locs.view(-1, 1, 3), prev_R, prev_t, curr_R, curr_t).squeeze(-2).mean(0)
         else:
             R1 = curr_R[:1]
             R2 = curr_R[1:]
             t1 = curr_t[:1]
             t2 = curr_t[1:]
             init_loc = torch.zeros(1, 1, 3, device=curr_R.device, dtype=curr_R.dtype)
-            newframe_locs = pnp.reproj(init_loc, R1, t1, R2, t2).squeeze(-2)
+            newframe_locs = reproj(init_loc, R1, t1, R2, t2).squeeze(-2)
             newframe_locs = torch.cat([init_loc.view(-1, 3), newframe_locs], dim=0)
         assert newframe_locs is not None
         return newframe_locs
@@ -200,3 +187,6 @@ class LocalGraph(Module):
             *merger.merge_newframes(newframe_locs, newframe_kpts, newframe_descs, newframe_R, newframe_t)
         )
         self._extend_track(newframe_locs)
+
+    def locate(self, kpts: Tensor, descs: Tensor) -> Tensor:
+        return NotImplemented

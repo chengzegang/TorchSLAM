@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any, Iterable, Mapping
 from websockets.server import serve
-from ..ops import db
+from ..ops._db import cozo
 from loguru import logger
 import pandas as pd
 from functools import partial
@@ -12,12 +12,12 @@ import sys
 import json
 
 
-async def update_database(data: Iterable[pd.DataFrame], database: db.Database):
+async def update_database(data: Iterable[pd.DataFrame], database: cozo.Database):
     database.update(*data)
     typer.secho('Database updated', fg=typer.colors.GREEN)
 
 
-async def send_landmarks(websocket, database: db.Database):
+async def send_landmarks(websocket, database: cozo.Database):
     data = database.get_landmarks()
     data = data['xyz'].values.tolist()
     event = {
@@ -30,7 +30,7 @@ async def send_landmarks(websocket, database: db.Database):
     await asyncio.sleep(1)
 
 
-async def handler(websocket: WebSocketServerProtocol, database: db.Database):
+async def handler(websocket: WebSocketServerProtocol, database: cozo.Database):
     typer.secho('Server started listening', fg=typer.colors.GREEN)
     async for event in websocket:
         message = json.loads(event)
@@ -46,7 +46,7 @@ async def handler(websocket: WebSocketServerProtocol, database: db.Database):
 
 
 async def server(confs: Mapping):
-    database = db.Database(**confs)
+    database = cozo.Database(**confs)
     async with serve(partial(handler, database=database), confs['host'], confs['server_port'], max_size=2**20 * 128):
         typer.secho('Server started', fg=typer.colors.GREEN)
         await asyncio.Future()

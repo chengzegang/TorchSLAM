@@ -8,8 +8,10 @@ from torch import Tensor
 from torch.nn import Module
 from torchdata.dataloader2 import DataLoader2, MultiProcessingReadingService
 import pandas as pd
+
+from torchslam.ops.functional.proj import spherical
 from ..ops import detector, graph, matcher, solver
-from .dp import ImageSequenceDataPipe, VideoDataPipe
+from ..ops.dp import ImageSequenceDataPipe, VideoDataPipe
 from websockets.exceptions import ConnectionClosed
 from websockets.client import connect  # type: ignore
 from websockets.legacy.client import WebSocketClientProtocol
@@ -148,8 +150,8 @@ def processor(queue: Queue | None, confs: Mapping):
     det_model = detector.SIFT(**confs)
     det_model.to(confs['device'])
 
-    sol = solver.FundamentalMatrix(confs['camera_model'])
-    mtc: Module = matcher.RANSACMatcher(sol, solver.sampson_epipolar_distance, **confs)  # type: ignore
+    sol = solver.Fundamental(confs['camera_model'])
+    mtc: Module = matcher.RANSACMatcher(sol, solver.sampson, **confs)  # type: ignore
     mtc.to(confs['device'])
     logger.debug('Initailizing dataloader')
 
@@ -173,6 +175,6 @@ def processor(queue: Queue | None, confs: Mapping):
         frame = frame.to(confs['device']).float()
 
         newframe_kpts, newframe_descs, _ = det_model(frame)
-        newframe_kpts = solver.spherical_project_inverse(newframe_kpts)
+        newframe_kpts = spherical(newframe_kpts, True)
         lg.update(newframe_kpts, newframe_descs)
         simple_visualize(lg.track, lg.keyframe_locs)
