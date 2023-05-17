@@ -16,13 +16,13 @@ def _dense_to_pairs(x: Tensor, y: Tensor, mask: Tensor, padding: float = 0) -> T
         i = indices[-2]
         j = indices[-1]
         if torch.numel(i) == 0 or torch.numel(j) == 0:
-            x_pair.append(torch.full(x[0].size(), torch.nan))
-            y_pair.append(torch.full(y[0].size(), torch.nan))
+            x_pair.append(torch.full(x[0].size(), torch.nan, device=x.device))
+            y_pair.append(torch.full(y[0].size(), torch.nan, device=y.device))
             continue
         x_pair.append(x1[..., i, :])
         y_pair.append(x2[..., j, :])
-    x_pair = torch.nested.as_nested_tensor(x_pair).to_padded_tensor(torch.nan)
-    y_pair = torch.nested.as_nested_tensor(y_pair).to_padded_tensor(torch.nan)
+    x_pair = torch.nested.as_nested_tensor(x_pair, device=x.device).to_padded_tensor(torch.nan)
+    y_pair = torch.nested.as_nested_tensor(y_pair, device=y.device).to_padded_tensor(torch.nan)
     mask = torch.isfinite(x_pair).all(dim=-1) & torch.isfinite(y_pair).all(dim=-1)
     x_pair = x_pair.nan_to_num(padding)
     y_pair = y_pair.nan_to_num(padding)

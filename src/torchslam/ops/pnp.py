@@ -133,7 +133,6 @@ def bundle_adjust(
     # p1 in B x 1 x N x 3
     # p2 in 1 x B x N x 3
     typer.echo('Bundle adjustment')
-    last_error = 1000
 
     # .shapes(p=p, d=d, mask=mask, phi=phi, t=t, ins=ins, w=w)
 
@@ -150,9 +149,8 @@ def bundle_adjust(
             err.backward()
             opt.step()
             progress.label = f'err: {err.item():.4f}'
-            if torch.abs(last_error - err) < 1e-8 or err <= 0.002:
+            if err <= 0.001:
                 break
-            last_error = err
     R = quaternion_to_rotation_matrix(phi).detach()  # B x 3 x 3
     # R = so3(phi).detach()  # B x 3 x 3
     t = t.detach()  # B x 3

@@ -8,7 +8,7 @@ class Configuration(Mapping[str, Any]):
     input_type: str | None = None
     reverse_sort_filenames: bool = False
     to_hw: int | tuple[int, int] | None = (128, 256)
-    skip_frames: int = 3
+    skip_frames: int = 0
     db_dir: str = 'map.db'
     dist_thr: float = 0.1
     feature_dim: int = 512
@@ -20,9 +20,10 @@ class Configuration(Mapping[str, Any]):
     ransac_thr: float = 0.65
     device: str = 'cpu'
     num_workers: int = 0
-    batch_size: int = 8
-    frame_queue_size: int = 8
+    batch_size: int = 4
     min_match_landmarks: int = 128
+    world_dist_thr: float = 0.001
+    track_at_most_n_keyframes: int = 16
     camera_model: str = 'equirectangular'
 
     num_features: int = 256
