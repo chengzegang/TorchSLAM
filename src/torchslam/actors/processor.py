@@ -9,7 +9,8 @@ from torch.nn import Module
 from torchdata.dataloader2 import DataLoader2, MultiProcessingReadingService
 import pandas as pd
 
-from torchslam.ops.functional.proj import spherical
+from ..ops.functional.proj import spherical
+from ..utils import config
 from ..ops import detector, graph, matcher, solver
 from ..ops.dp import ImageSequenceDataPipe, VideoDataPipe
 from websockets.exceptions import ConnectionClosed
@@ -21,6 +22,7 @@ import json
 from multiprocessing.managers import Namespace
 from concurrent.futures import ThreadPoolExecutor
 import matplotlib.pyplot as plt
+from ..ops.functional.metric import sampson
 
 
 def build_socket_event(
@@ -55,8 +57,8 @@ def empty_queue(queue: Queue):
             break
 
 
-async def _socket_handler(confs: Mapping, queue: Queue):
-    async for websocket in connect(f'ws://{confs["host"]}:{confs["server_port"]}', max_size=2**20 * 128):
+async def _socket_handler(queue: Queue):
+    async for websocket in connect(f'ws://{config.host}:{config.server_port}', max_size=2**20 * 128):
         typer.secho('Processor\'s websocket connected', fg=typer.colors.GREEN)
         while True:
             try:
@@ -80,8 +82,8 @@ async def _socket_handler(confs: Mapping, queue: Queue):
                 raise SystemExit
 
 
-def socket_thread(queue: Queue, confs: Mapping):
-    asyncio.run(_socket_handler(confs, queue))
+def socket_thread(queue: Queue):
+    asyncio.run(_socket_handler(queue))
 
 
 def collate_fn(batch: List[Tensor]) -> Tensor:
@@ -109,19 +111,19 @@ def simple_visualize(track: Tensor, kf_locs: Tensor):
     plt.close(fig)
 
 
-def run(confs: Mapping, ipc: Namespace | None = None):
+def run(ipc: Namespace | None = None):
     logger.debug('Processor process started')
     queue: Queue[Tuple[pd.DataFrame]] = Queue(maxsize=10)
-    if confs['processor_solver_only']:
+    if config.processor_solver_only:
         logger.debug('Processor solver only')
-        processor(None, confs)
+        processor()
         return
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix='TorchSLAM-Processor') as executor:
         try:
             logger.debug('Spawning socket thread')
-            executor.submit(socket_thread, queue, confs)
+            executor.submit(socket_thread, queue)
             logger.debug('Spawning processor thread')
-            executor.submit(processor, queue, confs)
+            executor.submit(processor, queue)
         except KeyboardInterrupt as e:
             executor.shutdown(wait=True, cancel_futures=True)
             raise e
@@ -135,34 +137,48 @@ def run(confs: Mapping, ipc: Namespace | None = None):
     logger.debug('Processor finished')
 
 
-def processor(queue: Queue | None, confs: Mapping):
+def processor(queue: Queue | None = None):
     typer.secho('Processor started', fg=typer.colors.GREEN)
-    if confs['input_type'] == 'image_sequence':
+    if config.input_path is None:
+        raise ValueError('Input path is not specified')
+    if config.input_type == 'image_sequence':
         reader: dp.iter.IterDataPipe = ImageSequenceDataPipe(
-            confs['input_path'], confs['to_hw'], confs['reverse_sort_filenames']
+            config.input_path, config.to_hw, config.reverse_sort_filenames
         )
-    elif confs['input_type'] == 'video':
-        reader = VideoDataPipe(confs['input_path'], confs['to_hw'])
+    elif config.input_type == 'video':
+        reader = VideoDataPipe(config.input_path, config.to_hw)
     else:
-        raise ValueError(f'Unknown input type: {confs["input_type"]}')
+        raise ValueError(f'Unknown input type: {config.input_type}')
     logger.debug('Initailizing models')
     n_f = len(reader)
-    det_model = detector.SIFT(**confs)
-    det_model.to(confs['device'])
-
-    sol = solver.Fundamental(confs['camera_model'])
-    mtc: Module = matcher.RANSACMatcher(sol, solver.sampson, **confs)  # type: ignore
-    mtc.to(confs['device'])
+    det_model = detector.SIFT(
+        feature_dim=config.feature_dim,
+        num_features=config.num_features,
+        patch_size=config.patch_size,
+        angle_bins=config.angle_bins,
+        spatial_bins=config.spatial_bins,
+        scale_n_levels=config.scale_n_levels,
+        sigma=config.sigma,
+        root_sift=config.root_sift,
+        double_image=config.double_image,
+    )
+    det_model.to(config.device)
+    sol = solver.Fundamental(config.camera_model)
+    mtc: Module = matcher.RANSACMatcher(
+        sol,
+        sampson,
+    )  # type: ignore
+    mtc.to(config.device)
     logger.debug('Initailizing dataloader')
 
-    frame_iter = reader.sharding_filter().batch(confs['batch_size']).collate(collate_fn=collate_fn)
-    rs = MultiProcessingReadingService(num_workers=confs['num_workers'], multiprocessing_context='spawn')
+    frame_iter = reader.sharding_filter().batch(config.batch_size).collate(collate_fn=collate_fn)
+    rs = MultiProcessingReadingService(num_workers=config.num_workers, multiprocessing_context='spawn')
     dl = DataLoader2(frame_iter, reading_service=rs)
     dl.seed(0)
     logger.debug('Starting processor loop')
 
-    lg = graph.LocalGraph(**confs, matcher=mtc)
-    lg.to(confs['device'])
+    lg = graph.LocalGraph(matcher=mtc)
+    lg.to(config.device)
 
     for f_idx, frame in enumerate(dl):
         if queue is not None:
@@ -172,9 +188,10 @@ def processor(queue: Queue | None, confs: Mapping):
             )
         else:
             typer.secho(f'Processing frame {f_idx} / {n_f}', fg=typer.colors.GREEN)
-        frame = frame.to(confs['device']).float()
+        frame = frame.to(config.device).float()
 
         newframe_kpts, newframe_descs, _ = det_model(frame)
         newframe_kpts = spherical(newframe_kpts, True)
         lg.update(newframe_kpts, newframe_descs)
         simple_visualize(lg.track, lg.keyframe_locs)
+        typer.secho(f'Keyframe tracked: {lg.keyframe_locs.shape[0]}', fg=typer.colors.GREEN)

@@ -3,12 +3,13 @@ from . import server, processor, optimizer
 import multiprocessing as mp
 from loguru import logger
 from concurrent.futures import ProcessPoolExecutor
+from ..utils import config
 
 
-def spawn(confs: Mapping):
+def spawn():
     mp.set_start_method('spawn')
     acts = []
-    for a in confs['actors']:
+    for a in config.actors:
         if a == 'server':
             acts.append(server.run)
         if a == 'processor':
@@ -16,13 +17,13 @@ def spawn(confs: Mapping):
         if a == 'optimizer':
             acts.append(optimizer.run)
     if len(acts) == 1:
-        acts[0](confs)
+        acts[0]()
     with mp.Manager() as manager, ProcessPoolExecutor(max_workers=2) as executor:
         try:
             ipc = manager.Namespace()
 
             for fn in acts:
-                executor.submit(fn, confs, ipc)
+                executor.submit(fn, ipc)
 
         except KeyboardInterrupt:
             executor.shutdown(wait=True, cancel_futures=True)

@@ -23,7 +23,7 @@ def proj(x: Tensor, R: Tensor, t: Tensor) -> Tensor:
 
 
 def reproj(x: Tensor, R1: Tensor, t1: Tensor, R2: Tensor, t2: Tensor) -> Tensor:
-    x = proj(x, torch.linalg.pinv(R1), -t1)
+    x = proj(x, R1.transpose(-1, -2), -t1)
     x = proj(x, R2, t2)
     return x
 
@@ -36,7 +36,7 @@ def creproj(x: Tensor, R1: Tensor, t1: Tensor, R2: Tensor, t2: Tensor) -> Tensor
     R2: (B2, 3, 3)
     t2: (B2, 3)
     '''
-    x = proj(x, torch.linalg.pinv(R1), -t1)  # (B, N, 3)
+    x = proj(x, R1.transpose(-1, -2), -t1)  # (B, N, 3)
     x = x.unsqueeze(1)
     R2 = R2.unsqueeze(0)
     t2 = t2.unsqueeze(0)
@@ -44,14 +44,16 @@ def creproj(x: Tensor, R1: Tensor, t1: Tensor, R2: Tensor, t2: Tensor) -> Tensor
     return x
 
 
-def sreproj(x: Tensor, R: Tensor, t: Tensor) -> Tensor:
+def sreproj(x: Tensor, R: Tensor, t: Tensor, loc: Tensor | None = None) -> Tensor:
     '''
     x: (B, N, 3)
     R: (B, 3, 3)
     t: (B, 3)
     '''
     B, N, _ = x.shape
-    x = proj(x, torch.linalg.pinv(R), -t)  # (B, N, 3)
+    x = proj(x, R.transpose(-1, -2), -t)  # (B, N, 3)
+    if loc is not None:
+        x = x + loc
     x = x.unsqueeze(1)
     R = R.unsqueeze(0)
     t = t.unsqueeze(0)

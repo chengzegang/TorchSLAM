@@ -1,15 +1,7 @@
 from typing import Tuple
 import torch
 from torch import Tensor
-import math
-import ot
-import time
-from matplotlib import pyplot as plt
 from pykeops.torch import LazyTensor
-from torch_scatter import scatter
-from loguru import logger
-import cugraph
-import pandas as pd
 
 
 def kmeans(x: Tensor, k: int = 10, its: int = 10) -> Tuple[Tensor, Tensor]:

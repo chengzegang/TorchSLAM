@@ -8,7 +8,9 @@ from torch.nn import Module
 from kornia.color import rgb_to_grayscale
 from kornia.feature import (
     BlobHessian,
+    TFeat,
     BlobDoG,
+    OriNet,
     LAFOrienter,
     ScaleSpaceDetector,
     SIFTDescriptor,
@@ -20,13 +22,16 @@ from torch import nn  # type: ignore
 from tqdm import tqdm
 
 from torch import Tensor
+from torch.nn import EmbeddingBag
+import torch.nn.functional as F
 
 
 class SIFT(Module):
     def __init__(
         self,
+        feature_dim: int = 128,
         num_features: int = 512,
-        patch_size: int = 41,
+        patch_size: int = 17,
         angle_bins: int = 8,
         spatial_bins: int = 8,
         scale_n_levels: int = 3,
@@ -36,15 +41,18 @@ class SIFT(Module):
         **kwargs,
     ) -> None:
         super().__init__()
+        self.feature_dim = feature_dim
         self.patch_size = patch_size
-        self.descriptor = SIFTDescriptor(patch_size, angle_bins, spatial_bins, rootsift=root_sift)
+        # self.descriptor = SIFTDescriptor(patch_size, angle_bins, spatial_bins, rootsift=root_sift)
+        self.descriptor = TFeat(True)
+
         self.detector = ScaleSpaceDetector(
             num_features,
             resp_module=BlobDoG(),
             scale_space_response=True,  # We need that, because DoG operates on scale-space
             nms_module=ConvQuadInterp3d(10),
             scale_pyr_module=ScalePyramid(scale_n_levels, sigma, patch_size, double_image=double_image),
-            ori_module=LAFOrienter(19),
+            ori_module=LAFOrienter(32, angle_detector=OriNet(pretrained=True)),
             mr_size=6.0,
             minima_are_also_good=True,
         )
@@ -53,15 +61,16 @@ class SIFT(Module):
         self.detector.to(x.device)
         with torch.no_grad():
             lafs, resps = self.detector(x.contiguous())
-            return lafs, resps
+        return lafs, resps
 
     def describe(self, x: Tensor, lafs: Tensor) -> Tensor:
         self.descriptor.to(x.device)
+        patches = extract_patches_from_pyramid(x, lafs, self.patch_size)
+        B, N, CH, H, W = patches.size()
         with torch.no_grad():
-            patches = extract_patches_from_pyramid(x, lafs, self.patch_size)
-            B, N, CH, H, W = patches.size()
             descs = self.descriptor(patches.view(B * N, CH, H, W)).view(B, N, -1)
-            return descs  # type: ignore
+            descs = F.normalize(descs, dim=-1, p=2)
+        return descs.contiguous()  # type: ignore
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         B, C, H, W = x.shape

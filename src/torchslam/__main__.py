@@ -2,7 +2,7 @@ from typing import Literal
 import typer
 import torchslam.__about__
 from . import actors
-from .utils.config import Configuration
+from .utils import config
 import os
 import torch
 from loguru import logger
@@ -35,48 +35,54 @@ def version():
 def serve(host: str = 'localhost', port: int = 7000):
     """Run server only"""
     typer.echo("Running server only\n")
-    conf = Configuration(host=host, server_port=port, actors=('server',))
-    actors.spawn(conf)
+
+    config(host=host, server_port=port, actors=('server',))
+    actors.spawn()
 
 
 @app.command()
-def solve(input: str):
+def solve(input_path: str):
     """Run solver only"""
     typer.echo("Running solver only\n")
     input_type: Literal['video', 'image_sequence'] = 'video'
-    if os.path.isdir(input):
+    if os.path.isdir(input_path):
         input_type = 'image_sequence'
-    elif os.path.isfile(input):
+    elif os.path.isfile(input_path):
         input_type = 'video'
     device: str = 'cpu'
     if torch.cuda.is_available():
         device = 'cuda'
-    conf = Configuration(input, input_type, device=device, actors=('processor',), processor_solver_only=True)
-    actors.spawn(conf)
+
+    config(
+        input_path=input_path, input_type=input_type, device=device, actors=('processor',), processor_solver_only=True
+    )
+    actors.spawn()
 
 
 @app.command()
-def wtf(input: str):
+def wtf(input_path: str):
     """Quick start"""
     typer.secho("WTF is this configuration? JUST RUN IT!\n", fg=typer.colors.RED, bold=True)
     input_type: Literal['video', 'image_sequence'] = 'video'
-    if os.path.isdir(input):
+    if os.path.isdir(input_path):
         input_type = 'image_sequence'
-    elif os.path.isfile(input):
+    elif os.path.isfile(input_path):
         input_type = 'video'
     device: str = 'cpu'
     if torch.cuda.is_available():
         device = 'cuda'
-    conf = Configuration(input, input_type, device=device)
-    actors.spawn(conf)
+
+    config(input_path=input_path, input_type=input_type, device=device)
+    actors.spawn()
 
 
 @app.command()
 def run(config_filepath: str):
     """Run SLAM"""
     typer.echo("Running SLAM\n")
-    conf = Configuration(**toml.load(config_filepath))
-    actors.spawn(conf)
+
+    config(**toml.load(config_filepath))
+    actors.spawn()
 
 
 if __name__ == "__main__":

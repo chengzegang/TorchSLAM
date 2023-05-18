@@ -1,7 +1,7 @@
 from typing import Callable
 import torch
 from torch import Tensor
-from torch.optim import Adam
+from torch.optim import SGD, Adam
 from loguru import logger
 import typer
 from torch.nn import Module
@@ -10,7 +10,8 @@ from torchslam.ops.functional.convert import quat_to_mat
 from ..utils import log
 import roma
 import torch.nn.functional as F
-from .functional.proj import proj, sreproj
+from .functional.proj import sreproj, reproj, proj
+import ot
 
 
 def _forward_pass(p: Tensor, phi: Tensor, t: Tensor) -> Tensor:
@@ -20,20 +21,22 @@ def _forward_pass(p: Tensor, phi: Tensor, t: Tensor) -> Tensor:
     return ph
 
 
-def _expand_flat(x: Tensor, y: Tensor, mask: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+def _expand_flat(x: Tensor, y: Tensor, mask: Tensor | None = None) -> tuple[Tensor, ...]:
     B1 = x.shape[0]
     B2 = y.shape[0]
     x = x.unsqueeze(1)
-    m1 = mask.unsqueeze(1).unsqueeze(-1)
     y = y.unsqueeze(0)
-    m2 = mask.unsqueeze(0).unsqueeze(-2)
     x = x.repeat(1, B2, *([1] * (x.ndim - 2)))
     y = y.repeat(B1, 1, *([1] * (y.ndim - 2)))
     x = x.flatten(0, 1)
     y = y.flatten(0, 1)
-    mask = m1 & m2
-    mask = mask.flatten(0, 1)
-    return x, y, mask
+    if mask is not None:
+        m1 = mask.unsqueeze(1).unsqueeze(-1)
+        m2 = mask.unsqueeze(0).unsqueeze(-2)
+        mask = (m1 + m2) / 2
+        mask = mask.flatten(0, 1)
+        return x, y, mask
+    return x, y
 
 
 def bundle_adjust(
@@ -50,7 +53,7 @@ def bundle_adjust(
     # log.shapes(p=p, d=d, mask=mask)
     p1, p2, m1 = _expand_flat(p, p, mask)
     d1, d2, m2 = _expand_flat(d, d, mask)
-    m = m1 & m2
+    m = (m1 + m2) > 0
     # log.shapes(p1=p1, p2=p2, d1=d1, d2=d2, m=m)
     ins, _, _ = matcher(p1, d1, p2, d2, m)
     ins = ins.view(B, B, N, N)
@@ -71,8 +74,6 @@ def bundle_adjust(
     # p2 in 1 x B x N x 3
     typer.echo('Bundle adjustment')
 
-    # .shapes(p=p, d=d, mask=mask, phi=phi, t=t, ins=ins, w=w)
-
     with typer.progressbar(range(it)) as progress:
         for _ in progress:
             opt.zero_grad()
@@ -85,10 +86,58 @@ def bundle_adjust(
             err = err.nanmean()
             err.backward()
             opt.step()
-            progress.label = f'err: {err.item():.4f}'
-            if err <= 0.001:
+            progress.label = f'err: {err.item():.6f}'
+            if err <= 0.002:
                 break
     R = quat_to_mat(phi).detach()  # B x 3 x 3
     # R = so3(phi).detach()  # B x 3 x 3
     t = t.detach()  # B x 3
     return R, t
+
+
+def location_bundle_adjust(
+    x: Tensor, p: Tensor, d: Tensor, R: Tensor, t: Tensor, it: int = 100
+) -> tuple[Tensor, Tensor]:
+    """
+    p: (B, N, 3)
+    d: (B, N, D)
+    x: (B, 3)
+    """
+
+    B, N, D = d.shape
+    x = x.detach()
+    x.requires_grad_(True)
+    opt = Adam([x], lr=1e-4)
+    costs = torch.cdist(d.view(B, 1, N, 1, D), d.view(1, B, 1, N, D), p=2)
+    costs = torch.softmax(costs.flatten(-2), dim=-1).view(B * B, N * N)
+    p1 = p.view(B, 1, N, 1, 3).repeat(1, B, 1, N, 1).view(B * B, N * N, 3)
+    p2 = p.view(1, B, 1, N, 3).repeat(B, 1, N, 1, 1).view(B * B, N * N, 3)
+    R = R.view(B, 1, 3, 3).repeat(1, B, 1, 1).view(B * B, 3, 3)
+    t = t.view(B, 1, 3).repeat(1, B, 1).view(B * B, 3)
+    x = x.view(B, 1, 3).repeat(1, B, 1).view(B * B, 1, 3)
+    with typer.progressbar(range(it)) as progress:
+        for _ in progress:
+            opt.zero_grad()
+            p2h = proj(p1 + x, R.transpose(-1, -2), -t)
+            p2h = proj(p2h, R, t)
+            # p: B x N x 3
+            # compare every two points among all frames, the most generalized form
+            reproj_err = p2h - p2
+            reproj_err = torch.norm(reproj_err, dim=-1, p=2)
+
+            reproj_err = reproj_err * costs
+            reproj_err = reproj_err.view(B, B, N, N)
+            loss = reproj_err.amin(dim=-1).mean()
+            # batch size averaging
+            loss.backward()
+            opt.step()
+            progress.label = f'err: {loss.item():.6f}'
+            if torch.abs(loss - 0.002) < 1e-4:
+                break
+    x = x.view(B, B, 3)
+    x = x.mean(dim=1)
+    reproj_err = reproj_err.mean(dim=(-1, -2)).mean(dim=-1)
+    std = reproj_err.std()
+    thr = torch.nanquantile(reproj_err.view(-1), 0.99) + std + 1e-5
+    outs = reproj_err.view(-1) > thr
+    return x.detach(), outs

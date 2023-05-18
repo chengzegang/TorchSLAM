@@ -189,6 +189,7 @@ module = [
     "torch-scatter.*",
     "torch_scatter.*",
     "ot.*",
+    "torch_geometric.*",
 ]
 ignore_missing_imports = true
 

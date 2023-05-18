@@ -27,7 +27,7 @@ def find_fundamental3d(p1: Tensor, p2: Tensor, mask: Tensor | None = None) -> Te
 def find_fundamental_equirectangular(p1: Tensor, p2: Tensor, mask: Tensor | None = None) -> Tensor:
     p1 = spherical(p1, True)
     p2 = spherical(p2, True)
-    return find_fundamental(p1, p2, mask)
+    return find_fundamental3d(p1, p2, mask)
 
 
 def find_fundamental(p1: Tensor, p2: Tensor, mask: Tensor | None = None) -> Tensor:

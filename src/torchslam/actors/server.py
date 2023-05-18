@@ -1,7 +1,9 @@
 import asyncio
 from typing import Any, Iterable, Mapping
 from websockets.server import serve
-from ..ops._db import cozo
+
+from ..utils import config
+from ..ops.database import cozo
 from loguru import logger
 import pandas as pd
 from functools import partial
@@ -12,25 +14,26 @@ import sys
 import json
 
 
-async def update_database(data: Iterable[pd.DataFrame], database: cozo.Database):
+async def update_database(data: Iterable[pd.DataFrame], database: cozo.CozoDB):
     database.update(*data)
     typer.secho('Database updated', fg=typer.colors.GREEN)
 
 
-async def send_landmarks(websocket, database: cozo.Database):
-    data = database.get_landmarks()
-    data = data['xyz'].values.tolist()
-    event = {
-        'type': 'all-landmark-locations',
-        'data': {
-            'xyz': data,
-        },
-    }
-    await websocket.send(json.dumps(event))
-    await asyncio.sleep(1)
+async def send_landmarks(websocket, database: cozo.CozoDB):
+    raise NotImplementedError
+    # data = database.get_landmarks()
+    # data = data['xyz'].values.tolist()
+    # event = {
+    #     'type': 'all-landmark-locations',
+    #     'data': {
+    #         'xyz': data,
+    #     },
+    # }
+    # await websocket.send(json.dumps(event))
+    # await asyncio.sleep(1)
 
 
-async def handler(websocket: WebSocketServerProtocol, database: cozo.Database):
+async def handler(websocket: WebSocketServerProtocol, database: cozo.CozoDB):
     typer.secho('Server started listening', fg=typer.colors.GREEN)
     async for event in websocket:
         message = json.loads(event)
@@ -45,12 +48,14 @@ async def handler(websocket: WebSocketServerProtocol, database: cozo.Database):
                 await send_landmarks(websocket, database)
 
 
-async def server(confs: Mapping):
-    database = cozo.Database(**confs)
-    async with serve(partial(handler, database=database), confs['host'], confs['server_port'], max_size=2**20 * 128):
+async def server():
+    database = cozo.CozoDB()
+    async with serve(
+        partial(handler, database=database), config['host'], config['server_port'], max_size=2**20 * 128
+    ):
         typer.secho('Server started', fg=typer.colors.GREEN)
         await asyncio.Future()
 
 
-def run(confs: Mapping, ipc: Namespace | None = None):
-    asyncio.run(server(confs))
+def run(ipc: Namespace | None = None):
+    asyncio.run(server())
