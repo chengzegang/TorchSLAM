@@ -176,19 +176,6 @@ class Keyframes(Module):
             self.keyframe_Rs = self.keyframe_Rs[~mask]
             self.keyframe_ts = self.keyframe_ts[~mask]
 
-    def local_adjust(self):
-        if len(self) <= config.min_tracking_keyframes:
-            return
-        rand_idx = torch.randperm(len(self) - 3)[:8]
-        self.keyframe_locs, outs = ba.location_bundle_adjust(
-            self.keyframe_locs[rand_idx],
-            self.keyframe_kpts[rand_idx],
-            self.keyframe_descs[rand_idx],
-            self.keyframe_Rs[rand_idx],
-            self.keyframe_ts[rand_idx],
-        )
-        self.remove(rand_idx[outs])
-
     def loc_knn(self, locs: Tensor, k: int = 1) -> Tuple[Tensor, Tensor]:
         if len(self.keyframe_locs) == 0:
             return torch.empty(0, dtype=torch.long, device=locs.device), torch.empty(
@@ -264,7 +251,6 @@ class Keyframes(Module):
         self.keyframe_ts = torch.cat([self.keyframe_ts, new_t], dim=0)
         self.merge()
         self.offload()
-        self.local_adjust()
 
     def get_bundle(
         self, newframe_descs: Tensor, n: int, last_loc: Tensor | None = None
