@@ -115,41 +115,43 @@ class Keyframes(Module):
         self._keyframe_ts = t[4]
 
     def merge(self):
-        if len(self) <= config.min_tracking_keyframes:
-            return
-        rand_idx = torch.randperm(len(self) - 3)[:8]
-        rand_idx = torch.sort(rand_idx)[0]
-        not_in = torch.ones(len(self), dtype=torch.bool)
-        not_in = not_in.scatter_(0, rand_idx, False)
+        pass
+        # if len(self) <= config.min_tracking_keyframes:
+        #    return
+        # rand_idx = torch.randperm(len(self) - 3)[:8]
+        # rand_idx = torch.sort(rand_idx)[0]
+        # not_in = torch.ones(len(self), dtype=torch.bool)
+        # not_in = not_in.scatter_(0, rand_idx, False)
 
-        new_kf_locs, new_kf_kpts, new_kf_descs, new_kf_R, new_kf_t = merger.merge_keyframes(
-            self.keyframe_locs[rand_idx],
-            self.keyframe_kpts[rand_idx],
-            self.keyframe_descs[rand_idx],
-            self.keyframe_Rs[rand_idx],
-            self.keyframe_ts[rand_idx],
-        )
-        self.offline(rand_idx)
-        self.keyframe_locs = self.keyframe_locs[not_in]
-        self.keyframe_kpts = self.keyframe_kpts[not_in]
-        self.keyframe_descs = self.keyframe_descs[not_in]
-        self.keyframe_Rs = self.keyframe_Rs[not_in]
-        self.keyframe_ts = self.keyframe_ts[not_in]
-
-        closest = torch.argmin(torch.cdist(new_kf_locs, self.keyframe_locs), dim=-1)
-
-        for idx, cls_idx in enumerate(closest):
-            self.keyframe_locs = torch.cat(
-                [self.keyframe_locs[:cls_idx], new_kf_locs[[idx]], self.keyframe_locs[cls_idx + 1 :]]
-            )
-            self.keyframe_kpts = torch.cat(
-                [self.keyframe_kpts[:cls_idx], new_kf_kpts[[idx]], self.keyframe_kpts[cls_idx + 1 :]]
-            )
-            self.keyframe_descs = torch.cat(
-                [self.keyframe_descs[:cls_idx], new_kf_descs[[idx]], self.keyframe_descs[cls_idx + 1 :]]
-            )
-            self.keyframe_Rs = torch.cat([self.keyframe_Rs[:cls_idx], new_kf_R[[idx]], self.keyframe_Rs[cls_idx + 1 :]])
-            self.keyframe_ts = torch.cat([self.keyframe_ts[:cls_idx], new_kf_t[[idx]], self.keyframe_ts[cls_idx + 1 :]])
+        #
+        # new_kf_locs, new_kf_kpts, new_kf_descs, new_kf_R, new_kf_t = merger.merge_keyframes(
+        #     self.keyframe_locs[rand_idx],
+        #     self.keyframe_kpts[rand_idx],
+        #     self.keyframe_descs[rand_idx],
+        #     self.keyframe_Rs[rand_idx],
+        #     self.keyframe_ts[rand_idx],
+        # )
+        # self.offline(rand_idx)
+        # self.keyframe_locs = self.keyframe_locs[not_in]
+        # self.keyframe_kpts = self.keyframe_kpts[not_in]
+        # self.keyframe_descs = self.keyframe_descs[not_in]
+        # self.keyframe_Rs = self.keyframe_Rs[not_in]
+        # self.keyframe_ts = self.keyframe_ts[not_in]
+        #
+        # closest = torch.argmin(torch.cdist(new_kf_locs, self.keyframe_locs), dim=-1)
+        #
+        # for idx, cls_idx in enumerate(closest):
+        #    self.keyframe_locs = torch.cat(
+        #        [self.keyframe_locs[:cls_idx], new_kf_locs[[idx]], self.keyframe_locs[cls_idx + 1 :]]
+        #    )
+        #    self.keyframe_kpts = torch.cat(
+        #        [self.keyframe_kpts[:cls_idx], new_kf_kpts[[idx]], self.keyframe_kpts[cls_idx + 1 :]]
+        #    )
+        #    self.keyframe_descs = torch.cat(
+        #        [self.keyframe_descs[:cls_idx], new_kf_descs[[idx]], self.keyframe_descs[cls_idx + 1 :]]
+        #    )
+        #    self.keyframe_Rs = torch.cat([self.keyframe_Rs[:cls_idx], new_kf_R[[idx]], self.keyframe_Rs[cls_idx + 1 :]])
+        #    self.keyframe_ts = torch.cat([self.keyframe_ts[:cls_idx], new_kf_t[[idx]], self.keyframe_ts[cls_idx + 1 :]])
 
     def offload(self):
         os.makedirs('kfs', exist_ok=True)
@@ -185,11 +187,7 @@ class Keyframes(Module):
         kf_idxs = knn(
             locs.view(-1, 3), self.keyframe_locs.view(-1, 3).type_as(locs), k=k, num_workers=config.num_workers
         )
-        dists = torch.dist(locs, self.keyframe_locs.to(locs.device)[kf_idxs])
-        valid = dists <= config.map_resolution
         i = torch.arange(len(locs), dtype=torch.long).type_as(kf_idxs)
-        i = i[valid]
-        kf_idxs = kf_idxs[valid]
         return i, kf_idxs
 
     def desc_knn(self, descs: Tensor, k: int = 1) -> Tuple[Tensor, Tensor]:
@@ -198,11 +196,7 @@ class Keyframes(Module):
                 0, dtype=torch.long, device=descs.device
             )
         kf_idxs = knn(descs, self.keyframe_descs.type_as(descs), k=k, num_workers=config.num_workers)
-        dists = torch.dist(descs, self.keyframe_descs.to(descs.device)[kf_idxs])
-        valid = dists <= merger.merged_desc_avg_dist + 1e-8
         i = torch.arange(len(descs), dtype=torch.long, device=descs.device)
-        i = i[valid]
-        kf_idxs = kf_idxs[valid]
         return i, kf_idxs
 
     def update(self, new_locs: Tensor, new_kpts: Tensor, new_descs: Tensor, new_R: Tensor, new_t: Tensor):
@@ -268,8 +262,8 @@ class Keyframes(Module):
             n_closed_used = math.ceil(n // 4)
             nf_idxs, kf_idxs = self.loc_knn(last_loc.view(-1, 3), k=n_closed_used)
             kf_idxs = kf_idxs.view(-1)
-            kf_idxs = torch.randperm(len(kf_idxs), device=newframe_descs.device)[:n_closed_used]
-            kf_idxs = kf_idxs.view(-1)
+            selected = torch.randperm(len(kf_idxs), device=newframe_descs.device)[:n_closed_used]
+            kf_idxs = kf_idxs[selected]
 
             index = torch.arange(len(self), device=newframe_descs.device)
             isin = torch.isin(index, kf_idxs).any(dim=-1)
@@ -402,6 +396,7 @@ class LocalGraph(Module):
         return newframe_locs
 
     def update(self, newframe_kpts: Tensor, newframe_descs: Tensor):
+        typer.secho('shape of newframe_descs: ' + str(newframe_descs.shape), fg='green')
         bundle_kpts, bundle_descs, bundle_mask, keyframe_locs = self._get_bundle(newframe_kpts, newframe_descs)
         bundle_R, bundle_t = self._bundle_adjust(bundle_kpts, bundle_descs, bundle_mask)
         newframe_R, newframe_t, keyframe_R, keyframe_t = self._unpack(

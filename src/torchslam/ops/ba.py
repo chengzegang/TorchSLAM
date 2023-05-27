@@ -1,17 +1,12 @@
 from typing import Callable
 import torch
 from torch import Tensor
-from torch.optim import SGD, Adam
-from loguru import logger
+from torch.optim import Adam
 import typer
 from torch.nn import Module
 
 from torchslam.ops.functional.convert import quat_to_mat
-from ..utils import log
-import roma
-import torch.nn.functional as F
-from .functional.proj import sreproj, reproj, proj
-import ot
+from .functional.proj import sreproj
 
 
 def _forward_pass(p: Tensor, phi: Tensor, t: Tensor) -> Tensor:

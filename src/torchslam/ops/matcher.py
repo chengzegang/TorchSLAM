@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from torch.nn import Module
 from typing import Callable, Tuple
-from .functional.nearest import round_nn
+from .functional.nearest import optimal_transport
 from .functional.ransac import ransac
 
 
@@ -25,6 +25,6 @@ class RANSACMatcher(Module):
         self.thr = ransac_thr
 
     def forward(self, xk: Tensor, xd: Tensor, yk: Tensor, yd: Tensor, mask: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
-        w = round_nn(xd, yd, mask)
+        w = optimal_transport(xd, yd, mask)
         best_model, inliers, best_errors = ransac(xk, yk, w, self.solver, self.evaluator, self.ratio, self.it, self.thr)
         return inliers, best_model, best_errors

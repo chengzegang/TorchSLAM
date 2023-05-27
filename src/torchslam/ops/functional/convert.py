@@ -1,10 +1,6 @@
-from typing import Callable, Tuple
+from typing import Tuple
 import torch
 from torch import Tensor
-from torch.optim import Adam
-from loguru import logger
-import typer
-from torch.nn import Module
 import roma
 import torch.nn.functional as F
 

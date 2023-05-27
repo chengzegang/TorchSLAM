@@ -7,10 +7,7 @@ import torch
 from torch.nn import Module
 from kornia.color import rgb_to_grayscale
 from kornia.feature import (
-    BlobHessian,
-    TFeat,
     BlobDoG,
-    OriNet,
     LAFOrienter,
     ScaleSpaceDetector,
     SIFTDescriptor,
@@ -18,22 +15,18 @@ from kornia.feature import (
     get_laf_center,
 )
 from kornia.geometry import ConvQuadInterp3d, ScalePyramid
-from torch import nn  # type: ignore
-from tqdm import tqdm
 
 from torch import Tensor
-from torch.nn import EmbeddingBag
 import torch.nn.functional as F
 
 
 class SIFT(Module):
     def __init__(
         self,
-        feature_dim: int = 128,
         num_features: int = 512,
         patch_size: int = 17,
         angle_bins: int = 8,
-        spatial_bins: int = 8,
+        spatial_bins: int = 4,
         scale_n_levels: int = 3,
         sigma: float = 1.6,
         root_sift: bool = True,
@@ -41,10 +34,9 @@ class SIFT(Module):
         **kwargs,
     ) -> None:
         super().__init__()
-        self.feature_dim = feature_dim
         self.patch_size = patch_size
-        # self.descriptor = SIFTDescriptor(patch_size, angle_bins, spatial_bins, rootsift=root_sift)
-        self.descriptor = TFeat(True)
+        self.descriptor = SIFTDescriptor(patch_size, angle_bins, spatial_bins, rootsift=root_sift)
+        # self.descriptor = TFeat(True)
 
         self.detector = ScaleSpaceDetector(
             num_features,
@@ -52,7 +44,7 @@ class SIFT(Module):
             scale_space_response=True,  # We need that, because DoG operates on scale-space
             nms_module=ConvQuadInterp3d(10),
             scale_pyr_module=ScalePyramid(scale_n_levels, sigma, patch_size, double_image=double_image),
-            ori_module=LAFOrienter(32, angle_detector=OriNet(pretrained=True)),
+            ori_module=LAFOrienter(),
             mr_size=6.0,
             minima_are_also_good=True,
         )

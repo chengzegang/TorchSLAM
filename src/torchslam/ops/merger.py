@@ -7,13 +7,7 @@ from torch_scatter import scatter
 from .functional.proj import proj
 from .functional.cluster import kmeans
 import torch.nn.functional as F
-from typing import Callable
-from torch.optim import Adam
-import typer
-from torch.nn import Module
 
-from torchslam.ops.functional.convert import quat_to_mat
-from ..utils import log
 
 merged_desc_avg_dist = 0.0
 lr = 0.99

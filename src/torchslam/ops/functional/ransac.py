@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from torch.nn import Module
 from typing import Callable, Tuple
-from .nearest import round_nn
+from .metric import sampson
 
 
 def _batch_randperm(b: int, size: int, device: str | torch.device = 'cpu') -> Tensor:
@@ -27,9 +27,9 @@ def ransac(
     y: Tensor,
     mask: Tensor,
     solver: Callable | Module,
-    evaluator: Callable | Module,
+    evaluator: Callable | Module = sampson,
     ransac_ratio: float = 0.6,
-    ransac_it: int = 16,
+    ransac_it: int = 8,
     ransac_thr: float = 0.75,
 ) -> Tuple[Tensor, Tensor, Tensor]:
     r"""RANSAC algorithm to find the best model.
@@ -74,12 +74,17 @@ def ransac(
     best_model_idx = torch.argmin(avg_errors, dim=-1)
 
     best_model = torch.gather(
-        models, dim=1, index=best_model_idx.view(-1, 1, 1, 1).repeat(1, 1, models.shape[-2], models.shape[-1])
+        models,
+        dim=1,
+        index=best_model_idx.view(-1, 1, 1, 1).repeat(1, 1, models.shape[-2], models.shape[-1]),
     ).squeeze(1)
 
     best_errors = torch.gather(
-        errors, dim=1, index=best_model_idx.view(-1, 1, 1, 1).repeat(1, 1, errors.shape[-2], errors.shape[-1])
+        errors,
+        dim=1,
+        index=best_model_idx.view(-1, 1, 1, 1).repeat(1, 1, errors.shape[-2], errors.shape[-1]),
     ).squeeze(1)
-    thrs = torch.nanquantile(best_errors, ransac_thr, dim=-1, keepdim=True)
-    inliers = best_errors < thrs
+    thrs = torch.nanquantile(best_errors.flatten(-2), ransac_thr, dim=-1, keepdim=True).unsqueeze(-1)
+    inliers = best_errors <= thrs
+    best_errors[~inliers] = torch.nan
     return best_model, inliers, best_errors

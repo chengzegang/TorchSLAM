@@ -1,15 +1,5 @@
-from typing import Callable
 import torch
 from torch import Tensor
-from torch.optim import Adam
-from loguru import logger
-import typer
-from torch.nn import Module
-
-from torchslam.ops.functional.convert import quat_to_mat
-
-import roma
-import torch.nn.functional as F
 
 
 def proj(x: Tensor, R: Tensor, t: Tensor) -> Tensor:
